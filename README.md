@@ -11,12 +11,12 @@ minichat
 - node.js>=0.4.7
 - npm
 - npm packages:
--- express@2.2.2
--- jade@0.10.6
--- connect-redis@1.0.3
--- redis@0.6.0
--- mongoose@1.3.0
--- socket.io@0.6.17
+    - express@2.2.2
+    - jade@0.10.6
+    - connect-redis@1.0.3
+    - redis@0.6.0
+    - mongoose@1.3.0
+    - socket.io@0.6.17
 
 # Configuration
 app.conf.js を参照．
