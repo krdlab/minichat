@@ -1,0 +1,16 @@
+body {
+  padding: 50px;
+  width: 480px;
+  font: 14px メイリオ, Helvetica, Arial, sans-serif;
+}
+
+#histories {
+  border: 1px solid gray;
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+
+#login_box {
+  background-color: whitesmoke;
+  border: 1px solid gray;
+}

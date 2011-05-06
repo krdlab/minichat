@@ -1,0 +1,16 @@
+!!!
+html
+  head
+    link(rel='stylesheet', href='/stylesheets/style.css')
+    title minichat: login
+  body
+    form(action='/login', method='POST')
+      table#login_box
+        tr
+          td ユーザ名：
+          td
+            input(name='username', type='text')
+        tr
+          td
+          td
+            input(type='submit', value='開始')
