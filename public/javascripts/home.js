@@ -33,6 +33,17 @@
       return false;
     });
 
+    $.getJSON('/history', { num: 10 }, function(json, status) {
+      var $hists = $('#histories');
+      $hists.empty();
+      if (json) {
+        for (var i=0, size=json.length; i<size; ++i) {
+          $hists.append(to_li(json[i]));
+        }
+      }
+      console.log(json);
+    });
+
     // 開始
     socket.connect();
   });

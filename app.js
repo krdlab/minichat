@@ -1,33 +1,24 @@
 // -- system configration --
 var conf = require('./app.conf.js');
-// $ node app.js [port] [host]
-var backend_port = process.argv[2] || conf.http.port;
-var backend_host = process.argv[3] || conf.http.host;
-
-// -- logging --
-var log = require('./lib/logging.js');
-var log_stream = log.createLogStream(backend_port);
-var log_func   = log.getSimpleLogger(log_stream);
 
 // -- model --
-var model = require('./lib/model.js');
-var db    = model.connect(conf.mongodb.host, conf.mongodb.db);
-
+var model   = require('./lib/model.js');
+var db      = model.connect(conf.mongodb.host, conf.mongodb.db);
 var Message = db.model('Message');
 
 // -- express --
 var express = require('express');
 var crypto  = require('crypto');
 var Redis   = require('connect-redis');
-var app     = express.createServer();
 
-var redis = new Redis();
+var redis   = new Redis();
+var app     = express.createServer();
 
 app.configure(function(){
   app.set('views', __dirname + '/views');
   app.set('view engine', 'jade');
   app.set('view options', { layout: false });
-  app.use(express.logger({ stream: log_stream }));
+  app.use(express.logger());
   app.use(express.bodyParser());
   app.use(express.methodOverride());
   app.use(express.cookieParser());
@@ -42,27 +33,32 @@ app.configure(function(){
 });
 
 app.helpers({ // static view helpers
-  sio: { host: backend_host, port: backend_port }
+  sio: { host: conf.http.host, port: conf.http.port }
 });
 
 app.get('/', function(req, res) {
   var username = req.session.username;
   if (username) {
-    var num_hist = 10;
-    Message.find({}).sort('created_at', -1).limit(num_hist).exec(function(err, docs) {
+    res.render('home.jade', {
+      username: username
+    });
+  } else {
+    res.redirect('/login');
+  }
+});
+
+app.get('/history', function(req, res) {
+  var username = req.session.username;
+  if (username) {
+    var num = Number(req.param('num'));
+    Message.find({}).sort('created_at', -1).limit(num).exec(function(err, docs) {
       if (err)  throw err;
-      var hist = [];
-      for (var i=0, size=docs.length; i<size; ++i) {
-        var doc = docs[i].doc;
-        hist.push({
-          username: doc.username,
-          message:  doc.message
-        });
-      }
-      res.render('home.jade', {
-        username: username,
-        hist:     hist
+      var hists = [];
+      docs.forEach(function(elem) {
+        hists.push({ username: elem.username, message: elem.message });
       });
+      res.contentType('application/json');
+      res.send(hists);
     });
   } else {
     res.redirect('/login');
@@ -86,42 +82,52 @@ app.post('/login', function(req, res) {
   });
 });
 
-// XXX 本当は必要
-//app.on('close', function() {
-//  model.disconnectAll(function() {
-//    log_stream.destroySoon();
-//    // socket.io が残ってるのかな？終わらない．．．
-//  });
-//});
-//process.on('SIGINT', function() {
-//  app.close();
-//});
-
-// -- start --
-app.listen(backend_port);
-console.log("minichat server listening on port %d", app.address().port);
-
 // -- socket.io --
-var parseCookie = require('connect').utils.parseCookie;
+var relay_server = require('net').createConnection(conf.relay.port, conf.relay.host);
 
-var socket = require('socket.io').listen(app, { log: log_func });
-socket.on('connection', function(client) {
-  client.on('message', function(data) {
-    if (data.cookie) {
-      var sid = parseCookie(data.cookie)['connect.sid'];
-      redis.get(sid, function(err, session) {
-        if (err) throw err;
-        var username = session.username;
-        var response = { username: username, message: data.message };
-        new Message(response).save(function(err) {
-          if (err) throw err;
-          client.send(response);
-          client.broadcast(response);
-        });
-      });
-    } else {
-      socket.log('[warn] no cookie: ' + client);
+relay_server.setEncoding('ascii');
+relay_server.on('connect', function() {
+
+  var sio = require('socket.io').listen(app);
+
+  var _buf = '';
+  relay_server.on('data', function(chunk) {
+    for (var i=0, size=chunk.length; i<size; ++i) {
+      if (chunk[i] == '\0') {
+        sio.broadcast(JSON.parse(_buf));
+        _buf = '';
+      } else {
+        _buf += chunk[i];
+      }
     }
   });
-});
 
+  var parseCookie = require('connect').utils.parseCookie;
+  sio.on('connection', function(client) {
+    client.on('message', function(data) {
+      if (data.cookie) {
+        var sid = parseCookie(data.cookie)['connect.sid'];
+
+        redis.get(sid, function(err, session) {
+          if (err) throw err;
+
+          var username = session.username;
+          var response = { username: username, message: data.message };
+
+          new Message(response).save(function(err) {
+            if (err) throw err;
+            // 別ノードにリレー経由で送る
+            relay_server.write(JSON.stringify(response)+'\0');
+            // 同じノードのクライアントには直接送る
+            client.send(response);
+            client.broadcast(response);
+          });
+
+        });
+      } else {
+        sio.log('[warn] no cookie: ' + client);
+      }
+    });
+  });
+});
+module.exports = app;
