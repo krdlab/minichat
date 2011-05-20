@@ -23,6 +23,7 @@ minichat
 app.conf.js を参照してください．
 プライベート IP の部分を自身の環境に合わせて設定すれば動きます．
 デフォルトでは以下のポート構成になっています．
+
 - relay_server: 3000
 - cluster: 8001
 - redis: default port (6379)
@@ -30,9 +31,11 @@ app.conf.js を参照してください．
 
 # Run
 まず Socket.io を中継する relay server を起動します．
+
     $ node relay_server.js
 
 次に cluster を起動します．
+
     $ node cluster.js
 
 フロントサーバ (reverse proxy) にアクセスします．
